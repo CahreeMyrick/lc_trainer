@@ -1,0 +1,561 @@
+<!--
+  LeetCode Patterns - Mastery Trainer
+  Updated with:
+  - rating range selector
+  - topic selector
+  - incremental recommendations like puzzle training
+  - personal rating
+  - attempt history with time, hints, self-score, notes
+  - solved tracking and weak topic stats
+
+  Progress is saved to progress.json via the Flask backend when available.
+  Falls back to localStorage if the backend is not running.
+
+  Run:   python3 server.py
+  Open:  http://localhost:8080
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeetCode Patterns - Mastery Trainer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0d12;--sf:#11141b;--sf2:#171b25;--sf3:#0f1219;--br:#1e2333;--mt:#353c52;--tx:#c4cad8;--dm:#5c6478;--ac:#4f7fff;--c1:#00c9a7;--c2:#4f7fff;--c3:#f0b429;--c4:#f97316;--c5:#ef4444;--c6:#991b1b;--ez:#00c9a7;--md:#f0b429;--hd:#ef4444;--good:#00c9a7;--bad:#ef4444}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--tx);font-family:"JetBrains Mono",monospace;font-size:12.5px;line-height:1.6}
+header{position:sticky;top:0;z-index:200;background:rgba(11,13,18,.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--br);padding:11px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-family:"Syne",sans-serif;font-weight:800;font-size:17px;color:#fff;letter-spacing:-.5px;flex-shrink:0}
+.logo em{color:var(--ac);font-style:normal}
+.hsub{font-size:10px;color:var(--dm);margin-right:auto}
+.sw{position:relative}
+.sw::before{content:"⌕";position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--dm);font-size:14px;pointer-events:none}
+#srch{background:var(--sf2);border:1px solid var(--br);border-radius:6px;padding:6px 10px 6px 27px;color:var(--tx);font-family:"JetBrains Mono",monospace;font-size:11.5px;width:210px;outline:none;transition:border-color .2s}
+#srch:focus{border-color:var(--ac)}
+#srch::placeholder{color:var(--dm)}
+.flt,.top-actions{display:flex;gap:5px;align-items:center}
+.fb,.mini-btn{background:var(--sf2);border:1px solid var(--br);border-radius:5px;padding:5px 10px;color:var(--dm);font-family:"JetBrains Mono",monospace;font-size:10.5px;cursor:pointer;transition:all .15s}
+.fb:hover,.fb.on,.mini-btn:hover{border-color:var(--ac);color:var(--ac);background:rgba(79,127,255,.08)}
+#savestatus{font-size:10px;padding:3px 9px;border-radius:4px;border:1px solid var(--br);color:var(--dm);background:var(--sf2);transition:all .3s;flex-shrink:0}
+#savestatus.saving{border-color:#f0b42966;color:var(--c3)}
+#savestatus.saved{border-color:#00c9a755;color:var(--c1)}
+#savestatus.err{border-color:#ef444466;color:var(--c5)}
+.wrap{max-width:1380px;margin:0 auto;padding:24px 24px 100px}
+.grd{display:grid;grid-template-columns:230px 1fr;gap:22px;align-items:start}
+.sbar{position:sticky;top:60px;background:var(--sf);border:1px solid var(--br);border-radius:10px;padding:12px 0;max-height:calc(100vh - 76px);overflow-y:auto}
+.sbar::-webkit-scrollbar{width:3px}
+.sbar::-webkit-scrollbar-thumb{background:var(--mt);border-radius:3px}
+.pw{padding:0 13px 11px;border-bottom:1px solid var(--br);margin-bottom:6px}
+.pl{display:flex;justify-content:space-between;font-size:10px;color:var(--dm);margin-bottom:4px}
+.pb{height:3px;background:var(--br);border-radius:3px;overflow:hidden}
+.pf{height:100%;background:var(--ac);border-radius:3px;transition:width .4s ease}
+.sbt{font-family:"Syne",sans-serif;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--dm);padding:0 13px 7px;margin-top:8px}
+.ni{display:flex;align-items:center;gap:8px;padding:6px 13px;cursor:pointer;text-decoration:none;color:var(--dm);font-size:10.5px;border-left:2px solid transparent;transition:all .12s}
+.ni:hover{background:rgba(79,127,255,.05);color:var(--tx);border-left-color:var(--mt)}
+.ni.on{color:var(--ac);border-left-color:var(--ac);background:rgba(79,127,255,.07)}
+.nd{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.nc{margin-left:auto;font-size:9px;background:var(--br);border-radius:10px;padding:1px 5px;color:var(--dm)}
+.card{background:var(--sf);border:1px solid var(--br);border-radius:12px;padding:15px;margin-bottom:18px}
+.card-title{font-family:"Syne",sans-serif;font-size:17px;font-weight:800;color:#fff;margin-bottom:2px}
+.card-sub{font-size:10.5px;color:var(--dm);margin-bottom:13px}
+.trainer-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:9.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--dm)}
+.field input,.field select,.field textarea{background:var(--sf2);border:1px solid var(--br);border-radius:7px;color:var(--tx);font-family:"JetBrains Mono",monospace;font-size:11px;padding:8px;outline:none}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--ac)}
+.field textarea{min-height:56px;resize:vertical}
+.topic-box{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:6px;margin-top:10px}
+.topic-pill{display:flex;align-items:center;gap:7px;padding:6px 8px;border:1px solid var(--br);border-radius:7px;background:var(--sf2);color:var(--dm);cursor:pointer;font-size:10px;user-select:none}
+.topic-pill input{accent-color:var(--ac)}
+.topic-pill.on{border-color:var(--ac);color:var(--tx);background:rgba(79,127,255,.08)}
+.trainer-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+.primary{background:var(--ac);border:1px solid var(--ac);color:#fff;border-radius:7px;padding:8px 12px;font-family:"JetBrains Mono",monospace;font-size:11px;cursor:pointer;font-weight:700}
+.secondary{background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:7px;padding:8px 12px;font-family:"JetBrains Mono",monospace;font-size:11px;cursor:pointer}
+.primary:hover,.secondary:hover{filter:brightness(1.12)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.stat{background:var(--sf);border:1px solid var(--br);border-radius:10px;padding:12px}
+.stat span{display:block;color:var(--dm);font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase}
+.stat strong{display:block;color:#fff;font-family:"Syne",sans-serif;font-size:25px;line-height:1.1;margin-top:4px}
+.leg{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;padding:11px 15px;background:var(--sf);border:1px solid var(--br);border-radius:8px;font-size:10.5px}
+.li{display:flex;align-items:center;gap:5px;color:var(--dm)}
+.ld{width:8px;height:8px;border-radius:50%}
+.sec{margin-bottom:30px;animation:fu .35s ease both}
+@keyframes fu{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.ph{display:flex;align-items:center;gap:12px;margin-bottom:11px;padding-bottom:10px;border-bottom:1px solid var(--br)}
+.pi{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;font-weight:700;font-family:"Syne",sans-serif}
+.pn{font-family:"Syne",sans-serif;font-size:16px;font-weight:700;color:#fff;line-height:1.2}
+.pd{font-size:10.5px;color:var(--dm);margin-top:2px;max-width:680px}
+.ps{margin-left:auto;text-align:right;font-size:10.5px;color:var(--dm);flex-shrink:0}
+.ps strong{display:block;font-size:19px;font-family:"Syne",sans-serif;font-weight:800;color:#fff;line-height:1}
+table{width:100%;border-collapse:collapse;background:var(--sf);border:1px solid var(--br);border-radius:10px;overflow:hidden}
+thead th{padding:8px 12px;text-align:left;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dm);background:rgba(0,0,0,.2);border-bottom:1px solid var(--br);font-weight:400}
+tbody tr{border-bottom:1px solid var(--br);transition:background .1s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:rgba(79,127,255,.04)}
+tbody tr.sv{opacity:.42}
+td{padding:8px 12px;vertical-align:middle}
+.tn{color:var(--dm);font-size:10.5px;width:48px}
+.tt{font-size:12.5px;color:var(--tx)}
+.tt a{color:inherit;text-decoration:none;transition:color .15s}
+.tt a:hover{color:var(--ac)}
+.tr{font-weight:700;font-size:12.5px;text-align:center;width:66px}
+.td{font-size:10.5px;width:64px}
+.tg{width:auto}
+.tg span,.tag{display:inline-block;font-size:9.5px;padding:1px 6px;border-radius:3px;background:var(--br);color:var(--dm);margin:1px 2px 1px 0}
+.tc{width:90px;text-align:center;white-space:nowrap}
+.cb,.attempt-btn{border:1.5px solid var(--mt);border-radius:4px;background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;color:var(--dm);font-size:10px;margin:0 1px}
+.cb{width:18px;height:18px;color:transparent}
+.attempt-btn{height:20px;padding:0 6px}
+.cb:hover,.attempt-btn:hover{border-color:var(--ez);color:var(--ez)}
+.cb.dn{background:var(--ez);border-color:var(--ez);color:#000}
+.r1{color:var(--c1)}.r2{color:var(--c2)}.r3{color:var(--c3)}.r4{color:var(--c4)}.r5{color:var(--c5)}.r6{color:var(--c6)}
+.de{color:var(--ez)}.dm{color:var(--md)}.dh{color:var(--hd)}
+.empty{text-align:center;padding:50px;color:var(--dm)}
+.recs{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-top:12px}
+.rec{background:var(--sf2);border:1px solid var(--br);border-radius:10px;padding:12px;position:relative;overflow:hidden}
+.rec::before{content:"";position:absolute;top:0;left:0;width:4px;height:100%;background:var(--ac)}
+.rec-top{display:flex;justify-content:space-between;gap:10px;color:var(--dm);font-size:10px;margin-bottom:5px}
+.rec-name{font-family:"Syne",sans-serif;color:#fff;font-size:15px;font-weight:700;text-decoration:none}
+.rec-name:hover{color:var(--ac)}
+.rec-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.rec-actions{display:flex;gap:6px;margin-top:10px}
+.history-list{display:grid;gap:8px;max-height:260px;overflow:auto;padding-right:3px}
+.hist{background:var(--sf2);border:1px solid var(--br);border-radius:8px;padding:9px;font-size:10.5px}
+.hist strong{color:#fff}
+.hist small{color:var(--dm)}
+.modal-wrap{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;padding:20px}
+.modal-wrap.show{display:flex}
+.modal{width:min(620px,100%);background:var(--sf);border:1px solid var(--br);border-radius:14px;padding:18px;box-shadow:0 20px 80px #0008}
+.modal-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px}
+.modal-title{font-family:"Syne",sans-serif;color:#fff;font-size:20px;font-weight:800}
+.xbtn{background:transparent;border:1px solid var(--br);color:var(--dm);border-radius:7px;padding:3px 8px;cursor:pointer}
+.xbtn:hover{color:#fff;border-color:var(--ac)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.full{grid-column:1/-1}
+.delta{font-weight:800}
+.good{color:var(--good)}.bad{color:var(--bad)}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:var(--mt);border-radius:5px}
+@media(max-width:900px){.grd{grid-template-columns:1fr}.sbar{position:static;max-height:none}.trainer-grid,.stats{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){header{align-items:stretch}#srch{width:100%}.sw{width:100%}.trainer-grid,.stats,.form-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">lc<em>.</em>trainer</div>
+  <div class="hsub" id="hsub">// mastery through repetition</div>
+  <div class="sw"><input id="srch" type="text" placeholder="search problems, tags..."></div>
+  <div class="flt">
+    <button class="fb on" data-f="all">All</button>
+    <button class="fb" data-f="unsolved">Unsolved</button>
+    <button class="fb" data-f="solved">Solved</button>
+    <button class="fb" data-f="weak">Weak</button>
+  </div>
+  <div class="top-actions"><button class="mini-btn" id="resetTopics">All topics</button></div>
+  <div id="savestatus">● disk</div>
+</header>
+<div class="wrap">
+  <section class="stats">
+    <div class="stat"><span>Your rating</span><strong id="userRatingView">1200</strong></div>
+    <div class="stat"><span>Solved</span><strong id="solvedView">0</strong></div>
+    <div class="stat"><span>Attempts</span><strong id="attemptsView">0</strong></div>
+    <div class="stat"><span>Weak topics</span><strong id="weakView">0</strong></div>
+  </section>
+
+  <section class="card" id="trainer">
+    <div class="card-title">Training Generator</div>
+    <div class="card-sub">Choose a rating range and topics. Recommendations are ordered incrementally around your personal rating, then gradually get harder.</div>
+    <div class="trainer-grid">
+      <div class="field"><label for="minRating">Min rating</label><input id="minRating" type="number" min="800" max="3000" step="50" value="1200"></div>
+      <div class="field"><label for="maxRating">Max rating</label><input id="maxRating" type="number" min="800" max="3000" step="50" value="1600"></div>
+      <div class="field"><label for="countProblems">Problem count</label><input id="countProblems" type="number" min="1" max="25" step="1" value="6"></div>
+      <div class="field"><label for="includeSolved">Solved policy</label><select id="includeSolved"><option value="unsolved">Unsolved only</option><option value="all">Include solved</option><option value="review">Review weak/old too</option></select></div>
+      <div class="field"><label for="targetMode">Difficulty mode</label><select id="targetMode"><option value="incremental">Incremental near my rating</option><option value="easiest">Easiest first</option><option value="hardest">Hardest first</option><option value="random">Random within range</option></select></div>
+      <div class="field"><label for="manualRating">Set your rating</label><input id="manualRating" type="number" min="800" max="3000" step="25" value="1200"></div>
+    </div>
+    <div class="topic-box" id="topicBox"></div>
+    <div class="trainer-actions">
+      <button class="primary" id="generateBtn">Generate training set</button>
+      <button class="secondary" id="saveRatingBtn">Save rating</button>
+      <button class="secondary" id="clearRecsBtn">Clear recommendations</button>
+      <button class="secondary" id="resetProgressBtn">Reset all progress</button>
+    </div>
+    <div class="recs" id="recommendations"></div>
+  </section>
+
+  <div class="leg">
+    <div class="li"><div class="ld" style="background:var(--c1)"></div>&lt;1400</div>
+    <div class="li"><div class="ld" style="background:var(--c2)"></div>1400-1599</div>
+    <div class="li"><div class="ld" style="background:var(--c3)"></div>1600-1899</div>
+    <div class="li"><div class="ld" style="background:var(--c4)"></div>1900-2099</div>
+    <div class="li"><div class="ld" style="background:var(--c5)"></div>2100-2399</div>
+    <div class="li"><div class="ld" style="background:var(--c6)"></div>2400+</div>
+    <div class="li" style="margin-left:auto"><span style="color:var(--ez)">✓</span> solved · <span style="color:var(--ac)">log</span> attempt</div>
+  </div>
+
+  <div class="grd">
+    <nav class="sbar">
+      <div class="pw">
+        <div class="pl"><span>Progress</span><span id="ptx">0/0</span></div>
+        <div class="pb"><div class="pf" id="pfl" style="width:0%"></div></div>
+      </div>
+      <div class="sbt">Patterns</div>
+      <div id="nav"></div>
+      <div class="sbt">Recent attempts</div>
+      <div class="history-list" id="historyList" style="padding:0 9px 8px"></div>
+    </nav>
+    <main id="main"></main>
+  </div>
+</div>
+
+<div class="modal-wrap" id="attemptModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="modalTitle">Log attempt</div>
+        <div class="card-sub" id="modalSub" style="margin-bottom:0"></div>
+      </div>
+      <button class="xbtn" id="closeModal">close</button>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label for="attemptSolved">Result</label><select id="attemptSolved"><option value="true">Solved</option><option value="false">Missed / could not solve</option></select></div>
+      <div class="field"><label for="attemptMinutes">Minutes</label><input id="attemptMinutes" type="number" min="0" step="1" value="25"></div>
+      <div class="field"><label for="attemptHints">Hints used</label><input id="attemptHints" type="number" min="0" step="1" value="0"></div>
+      <div class="field"><label for="attemptScore">Self score</label><select id="attemptScore"><option value="5">5 - clean and fast</option><option value="4">4 - solved well</option><option value="3" selected>3 - okay</option><option value="2">2 - struggled</option><option value="1">1 - failed badly</option></select></div>
+      <div class="field full"><label for="attemptNotes">Notes</label><textarea id="attemptNotes" placeholder="What was the key idea? What confused you?"></textarea></div>
+    </div>
+    <div class="trainer-actions">
+      <button class="primary" id="saveAttemptBtn">Save attempt</button>
+      <button class="secondary" id="cancelAttemptBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PATTERNS = [{"id": "arrays-hashing", "icon": "#", "color": "#4f7fff", "name": "Arrays & Hashing", "desc": "Foundation of everything. Hash maps for O(1) lookup, frequency counts, grouping, and duplicate detection.", "problems": [[1, "Two Sum", 1180, "Easy", ["hash map"]], [217, "Contains Duplicate", 1180, "Easy", ["hash set"]], [242, "Valid Anagram", 1180, "Easy", ["hash map", "sorting"]], [383, "Ransom Note", 1184, "Easy", ["hash map"]], [448, "Find All Numbers Disappeared in Array", 1184, "Easy", ["array"]], [268, "Missing Number", 1188, "Easy", ["xor", "math"]], [169, "Majority Element", 1200, "Easy", ["boyer-moore", "hash map"]], [229, "Majority Element II", 1223, "Medium", ["boyer-moore"]], [349, "Intersection of Two Arrays", 1228, "Easy", ["hash set"]], [350, "Intersection of Two Arrays II", 1235, "Easy", ["hash map", "sorting"]], [202, "Happy Number", 1243, "Easy", ["hash set", "math"]], [706, "Design HashMap", 1260, "Easy", ["design", "hash"]], [380, "Insert Delete GetRandom O1", 1310, "Medium", ["hash map", "array"]], [49, "Group Anagrams", 1360, "Medium", ["hash map", "string"]], [347, "Top K Frequent Elements", 1388, "Medium", ["hash map", "heap"]], [238, "Product of Array Except Self", 1390, "Medium", ["array", "prefix"]], [128, "Longest Consecutive Sequence", 1490, "Medium", ["hash set"]], [454, "4Sum II", 1490, "Medium", ["hash map"]], [299, "Bulls and Cows", 1500, "Medium", ["hash map", "string"]], [36, "Valid Sudoku", 1515, "Medium", ["hash set", "matrix"]], [554, "Brick Wall", 1535, "Medium", ["hash map"]], [523, "Continuous Subarray Sum", 1546, "Medium", ["hash map", "prefix sum"]], [560, "Subarray Sum Equals K", 1576, "Medium", ["hash map", "prefix sum"]], [1010, "Pairs of Songs With Total Durations Divisible by 60", 1582, "Medium", ["hash map", "math"]], [974, "Subarray Sums Divisible by K", 1628, "Medium", ["hash map", "prefix sum"]], [146, "LRU Cache", 1720, "Medium", ["design", "hash map", "linked list"]], [41, "First Missing Positive", 1885, "Hard", ["array", "cyclic sort"]], [460, "LFU Cache", 1905, "Hard", ["design", "hash map"]], [432, "All O-one Data Structure", 2020, "Hard", ["design", "hash map"]], [739, "Daily Temperatures", 1487, "Medium", ["monotonic stack", "hash map"]], [387, "First Unique Character in a String", 1247, "Easy", ["hash map", "string"]], [451, "Sort Characters By Frequency", 1543, "Medium", ["hash map", "sorting"]], [1002, "Find Common Characters", 1307, "Easy", ["hash map", "string"]], [409, "Longest Palindrome", 1218, "Easy", ["hash map", "string"]], [290, "Word Pattern", 1278, "Easy", ["hash map", "string"]], [205, "Isomorphic Strings", 1262, "Easy", ["hash map", "string"]], [819, "Most Common Word", 1206, "Easy", ["hash map", "string"]], [1207, "Unique Number of Occurrences", 1197, "Easy", ["hash map"]]]}, {"id": "two-pointers", "icon": "tp", "color": "#00c9a7", "name": "Two Pointers", "desc": "Left/right pointers converging inward. Core for sorted arrays, palindromes, pair sums, and in-place partitioning.", "problems": [[125, "Valid Palindrome", 1200, "Easy", ["string"]], [283, "Move Zeroes", 1200, "Easy", ["array"]], [26, "Remove Duplicates from Sorted Array", 1208, "Easy", ["array"]], [27, "Remove Element", 1208, "Easy", ["array"]], [977, "Squares of a Sorted Array", 1212, "Easy", ["sorting"]], [344, "Reverse String", 1215, "Easy", ["string"]], [905, "Sort Array By Parity", 1220, "Easy", ["array"]], [392, "Is Subsequence", 1300, "Easy", ["string", "dp"]], [680, "Valid Palindrome II", 1310, "Medium", ["string", "greedy"]], [167, "Two Sum II Input Array Is Sorted", 1401, "Medium", ["array"]], [881, "Boats to Save People", 1530, "Medium", ["sorting", "greedy"]], [948, "Bag of Tokens", 1545, "Medium", ["sorting", "greedy"]], [1679, "Max Number of K-Sum Pairs", 1524, "Medium", ["hash map", "sorting"]], [1750, "Minimum Length of String After Deleting Similar Ends", 1501, "Medium", ["string"]], [15, "3Sum", 1480, "Medium", ["array", "sorting"]], [16, "3Sum Closest", 1543, "Medium", ["array", "sorting"]], [18, "4Sum", 1711, "Medium", ["array", "sorting"]], [75, "Sort Colors", 1491, "Medium", ["array", "dutch flag"]], [31, "Next Permutation", 1556, "Medium", ["array", "math"]], [845, "Longest Mountain in Array", 1640, "Medium", ["array"]], [763, "Partition Labels", 1629, "Medium", ["string", "greedy"]], [11, "Container With Most Water", 1670, "Medium", ["array", "greedy"]], [287, "Find the Duplicate Number", 1431, "Medium", ["binary search", "cycle"]], [838, "Push Dominoes", 1638, "Medium", ["simulation", "two pointers"]], [647, "Palindromic Substrings", 1538, "Medium", ["expand around center"]], [5, "Longest Palindromic Substring", 1616, "Medium", ["expand around center"]], [42, "Trapping Rain Water", 1992, "Hard", ["array", "monotonic stack"]], [532, "K-diff Pairs in an Array", 1499, "Medium", ["hash map", "sorting"]], [1099, "Two Sum Less Than K", 1298, "Easy", ["sorting"]], [189, "Rotate Array", 1448, "Medium", ["array", "math"]], [88, "Merge Sorted Array", 1285, "Easy", ["two pointers", "merge"]], [443, "String Compression", 1413, "Medium", ["string", "two pointers"]]]}, {"id": "sliding-window", "icon": "sw", "color": "#a78bfa", "name": "Sliding Window", "desc": "Fixed or variable-size window gliding through an array or string. Master shrink and expand logic and when to use hash maps inside.", "problems": [[643, "Maximum Average Subarray I", 1263, "Easy", ["array"]], [1876, "Substrings of Size Three with Distinct Characters", 1277, "Easy", ["string"]], [1456, "Maximum Number of Vowels in a Substring", 1263, "Medium", ["string"]], [1343, "Number of Sub-arrays of Size K and Average GTE Threshold", 1317, "Medium", ["array"]], [1493, "Longest Subarray of 1s After Deleting One Element", 1423, "Medium", ["array"]], [1004, "Max Consecutive Ones III", 1525, "Medium", ["array"]], [3, "Longest Substring Without Repeating Characters", 1527, "Medium", ["string", "hash map"]], [1695, "Maximum Erasure Value", 1528, "Medium", ["array", "hash set"]], [209, "Minimum Size Subarray Sum", 1532, "Medium", ["array"]], [567, "Permutation in String", 1561, "Medium", ["string", "hash map"]], [438, "Find All Anagrams in a String", 1561, "Medium", ["string", "hash map"]], [2461, "Maximum Sum of Distinct Subarrays With Length K", 1553, "Medium", ["array", "hash map"]], [187, "Repeated DNA Sequences", 1524, "Medium", ["string", "hash map"]], [904, "Fruit Into Baskets", 1516, "Medium", ["hash map"]], [930, "Binary Subarrays With Sum", 1592, "Medium", ["hash map", "prefix sum"]], [713, "Subarray Product Less Than K", 1622, "Medium", ["array"]], [1358, "Number of Substrings Containing All Three Characters", 1646, "Medium", ["string"]], [2024, "Maximize the Confusion of an Exam", 1643, "Medium", ["string"]], [424, "Longest Repeating Character Replacement", 1658, "Medium", ["string"]], [1423, "Maximum Points You Can Obtain from Cards", 1574, "Medium", ["array"]], [658, "Find K Closest Elements", 1573, "Medium", ["binary search"]], [2090, "K Radius Subarray Averages", 1358, "Medium", ["array"]], [992, "Subarrays with K Different Integers", 2020, "Hard", ["hash map"]], [76, "Minimum Window Substring", 1915, "Hard", ["string", "hash map"]], [239, "Sliding Window Maximum", 2034, "Hard", ["deque", "monotonic"]], [480, "Sliding Window Median", 2210, "Hard", ["heap", "sorted structure"]], [1208, "Get Equal Substrings Within Budget", 1502, "Medium", ["prefix sum"]], [2379, "Minimum Recolors to Get K Consecutive Black Blocks", 1221, "Easy", ["array"]], [1052, "Grumpy Bookstore Owner", 1454, "Medium", ["array"]], [2401, "Longest Nice Subarray", 1624, "Medium", ["bit manipulation"]]]}, {"id": "prefix-sum", "icon": "ps", "color": "#34d399", "name": "Prefix Sum", "desc": "Precompute cumulative sums for O(1) range queries. Combined with hash maps to find subarrays with target sums.", "problems": [[303, "Range Sum Query Immutable", 1200, "Easy", ["array"]], [1480, "Running Sum of 1d Array", 1200, "Easy", ["array"]], [1732, "Find the Highest Altitude", 1200, "Easy", ["array"]], [724, "Find Pivot Index", 1208, "Easy", ["array"]], [1422, "Maximum Score After Splitting a String", 1232, "Easy", ["string"]], [2574, "Left and Right Sum Differences", 1200, "Easy", ["array"]], [2090, "K Radius Subarray Averages", 1358, "Medium", ["array"]], [304, "Range Sum Query 2D Immutable", 1350, "Medium", ["matrix"]], [325, "Maximum Size Subarray Sum Equals k", 1428, "Medium", ["hash map"]], [525, "Contiguous Array", 1504, "Medium", ["hash map"]], [560, "Subarray Sum Equals K", 1541, "Medium", ["hash map"]], [1248, "Count Number of Nice Subarrays", 1586, "Medium", ["hash map"]], [974, "Subarray Sums Divisible by K", 1591, "Medium", ["hash map", "math"]], [523, "Continuous Subarray Sum", 1645, "Medium", ["hash map", "math"]], [930, "Binary Subarrays With Sum", 1592, "Medium", ["hash map"]], [1590, "Make Sum Divisible by P", 1743, "Medium", ["hash map", "math"]], [1124, "Longest Well-Performing Interval", 1695, "Medium", ["hash map", "monotonic stack"]], [238, "Product of Array Except Self", 1390, "Medium", ["array"]], [1371, "Find the Longest Substring Containing Vowels in Even Counts", 1813, "Medium", ["bitmask", "hash map"]], [2121, "Intervals Between Identical Elements", 1622, "Medium", ["array"]], [363, "Max Sum of Rectangle No Larger Than K", 2102, "Hard", ["binary search", "prefix sum"]], [1074, "Number of Submatrices That Sum to Target", 2189, "Hard", ["matrix", "hash map"]], [2485, "Find the Pivot Integer", 1207, "Easy", ["math", "prefix sum"]], [1310, "XOR Queries of a Subarray", 1459, "Medium", ["prefix xor"]], [2281, "Sum of Total Strength of Wizards", 2172, "Hard", ["monotonic stack", "prefix sum"]]]}, {"id": "binary-search", "icon": "bs", "color": "#f0b429", "name": "Binary Search", "desc": "Halve the search space each step. Goes way beyond sorted arrays. Learn to binary search on the answer itself.", "problems": [[704, "Binary Search", 1170, "Easy", ["array"]], [35, "Search Insert Position", 1180, "Easy", ["array"]], [278, "First Bad Version", 1180, "Easy", ["array"]], [374, "Guess Number Higher or Lower", 1180, "Easy", ["math"]], [69, "Sqrt of x", 1194, "Easy", ["math"]], [744, "Find Smallest Letter Greater Than Target", 1198, "Easy", ["array"]], [852, "Peak Index in a Mountain Array", 1200, "Easy", ["array"]], [1351, "Count Negative Numbers in a Sorted Matrix", 1200, "Easy", ["matrix"]], [367, "Valid Perfect Square", 1200, "Easy", ["math"]], [441, "Arranging Coins", 1200, "Easy", ["math"]], [2389, "Longest Subsequence With Limited Sum", 1282, "Easy", ["sorting", "prefix sum"]], [540, "Single Element in a Sorted Array", 1361, "Medium", ["array"]], [74, "Search a 2D Matrix", 1418, "Medium", ["matrix"]], [153, "Find Minimum in Rotated Sorted Array", 1480, "Medium", ["array"]], [33, "Search in Rotated Sorted Array", 1525, "Medium", ["array"]], [81, "Search in Rotated Sorted Array II", 1584, "Medium", ["array"]], [162, "Find Peak Element", 1540, "Medium", ["array"]], [34, "Find First and Last Position of Element in Sorted Array", 1540, "Medium", ["array"]], [875, "Koko Eating Bananas", 1594, "Medium", ["binary search on answer"]], [1011, "Capacity To Ship Packages Within D Days", 1635, "Medium", ["binary search on answer"]], [1283, "Find the Smallest Divisor Given a Threshold", 1647, "Medium", ["binary search on answer"]], [1482, "Minimum Number of Days to Make m Bouquets", 1666, "Medium", ["binary search on answer"]], [1870, "Minimum Speed to Arrive on Time", 1676, "Medium", ["binary search on answer"]], [1760, "Minimum Limit of Balls in a Bag", 1673, "Medium", ["binary search on answer"]], [2226, "Maximum Candies Allocated to K Children", 1702, "Medium", ["binary search on answer"]], [1802, "Maximum Value at a Given Index in a Bounded Array", 1803, "Medium", ["binary search", "greedy"]], [378, "Kth Smallest Element in a Sorted Matrix", 1590, "Medium", ["heap", "binary search"]], [1901, "Find a Peak Element II", 1818, "Medium", ["matrix", "binary search"]], [1861, "Rotating the Box", 1714, "Medium", ["matrix", "two pointers"]], [792, "Number of Matching Subsequences", 1695, "Medium", ["string", "binary search"]], [410, "Split Array Largest Sum", 1963, "Hard", ["binary search on answer", "dp"]], [154, "Find Minimum in Rotated Sorted Array II", 1940, "Hard", ["array"]], [719, "Find K-th Smallest Pair Distance", 2015, "Hard", ["binary search", "sliding window"]], [4, "Median of Two Sorted Arrays", 2042, "Hard", ["divide and conquer"]], [2300, "Successful Pairs of Spells and Potions", 1476, "Medium", ["sorting", "binary search"]], [1385, "Find the Distance Value Between Two Arrays", 1325, "Easy", ["sorting", "binary search"]], [275, "H-Index II", 1360, "Medium", ["binary search"]], [1064, "Fixed Point", 1188, "Easy", ["binary search"]]]}, {"id": "fast-slow-pointers", "icon": "fs", "color": "#f472b6", "name": "Fast and Slow Pointers", "desc": "Floyd's cycle detection. Two pointers at different speeds. Finds cycles, middle nodes, and duplicate values.", "problems": [[141, "Linked List Cycle", 1200, "Easy", ["linked list"]], [876, "Middle of the Linked List", 1234, "Easy", ["linked list"]], [234, "Palindrome Linked List", 1293, "Easy", ["linked list", "two pointers"]], [202, "Happy Number", 1312, "Easy", ["math", "hash set"]], [83, "Remove Duplicates from Sorted List", 1320, "Easy", ["linked list"]], [160, "Intersection of Two Linked Lists", 1373, "Easy", ["linked list"]], [19, "Remove Nth Node From End of List", 1464, "Medium", ["linked list"]], [61, "Rotate List", 1547, "Medium", ["linked list"]], [92, "Reverse Linked List II", 1556, "Medium", ["in-place reversal"]], [143, "Reorder List", 1552, "Medium", ["linked list"]], [82, "Remove Duplicates from Sorted List II", 1526, "Medium", ["linked list"]], [328, "Odd Even Linked List", 1487, "Medium", ["linked list"]], [142, "Linked List Cycle II", 1701, "Medium", ["linked list", "math"]], [287, "Find the Duplicate Number", 1746, "Medium", ["array", "cycle detection"]], [457, "Circular Array Loop", 1797, "Medium", ["array"]], [148, "Sort List", 1741, "Medium", ["merge sort", "fast slow"]], [2058, "Find the Minimum and Maximum Number of Nodes Between Critical Points", 1500, "Medium", ["linked list"]], [1474, "Delete N Nodes After M Nodes of a Linked List", 1348, "Easy", ["linked list"]]]}, {"id": "stack", "icon": "st", "color": "#fb923c", "name": "Stack and Monotonic Stack", "desc": "LIFO for bracket matching, expression eval, next-greater-element. Monotonic stack solves span and range problems in O(n).", "problems": [[20, "Valid Parentheses", 1200, "Easy", ["string"]], [1047, "Remove All Adjacent Duplicates In String", 1207, "Easy", ["string"]], [682, "Baseball Game", 1208, "Easy", ["simulation"]], [496, "Next Greater Element I", 1296, "Easy", ["hash map", "monotonic"]], [232, "Implement Queue using Stacks", 1300, "Easy", ["design"]], [225, "Implement Stack using Queues", 1305, "Easy", ["design"]], [1441, "Build an Array With Stack Operations", 1340, "Easy", ["simulation"]], [155, "Min Stack", 1302, "Medium", ["design"]], [150, "Evaluate Reverse Polish Notation", 1344, "Medium", ["math"]], [735, "Asteroid Collision", 1419, "Medium", ["array", "simulation"]], [739, "Daily Temperatures", 1487, "Medium", ["monotonic stack"]], [503, "Next Greater Element II", 1511, "Medium", ["circular array", "monotonic"]], [1019, "Next Greater Node In Linked List", 1571, "Medium", ["linked list", "monotonic"]], [901, "Online Stock Span", 1573, "Medium", ["design", "monotonic"]], [402, "Remove K Digits", 1710, "Medium", ["greedy", "monotonic"]], [856, "Score of Parentheses", 1562, "Medium", ["string", "math"]], [1209, "Remove All Adjacent Duplicates in String II", 1680, "Medium", ["string"]], [394, "Decode String", 1587, "Medium", ["string", "recursion"]], [456, "132 Pattern", 1780, "Medium", ["monotonic stack"]], [2390, "Removing Stars From a String", 1347, "Medium", ["string", "simulation"]], [316, "Remove Duplicate Letters", 1878, "Medium", ["greedy", "monotonic"]], [907, "Sum of Subarray Minimums", 1817, "Medium", ["monotonic stack", "dp"]], [1081, "Smallest Subsequence of Distinct Characters", 1855, "Medium", ["greedy", "monotonic"]], [1776, "Car Fleet II", 1897, "Hard", ["monotonic stack", "math"]], [84, "Largest Rectangle in Histogram", 1993, "Hard", ["monotonic stack"]], [85, "Maximal Rectangle", 2120, "Hard", ["monotonic stack", "dp"]], [224, "Basic Calculator", 2035, "Hard", ["math", "recursion"]], [42, "Trapping Rain Water", 1992, "Hard", ["two pointers", "monotonic"]], [2116, "Check if a Parentheses String Can Be Valid", 1646, "Medium", ["greedy", "stack"]], [1598, "Crawler Log Folder", 1181, "Easy", ["stack", "string"]], [844, "Backspace String Compare", 1286, "Easy", ["stack", "two pointers"]], [1021, "Remove Outermost Parentheses", 1209, "Easy", ["stack", "string"]], [921, "Minimum Add to Make Parentheses Valid", 1423, "Medium", ["stack", "greedy"]]]}, {"id": "linked-list", "icon": "ll", "color": "#67e8f9", "name": "Linked List", "desc": "Pointer manipulation, dummy nodes, reversal tricks. Master in-place reversal, merging, and the runner technique.", "problems": [[206, "Reverse Linked List", 1200, "Easy", ["recursion", "iterative"]], [21, "Merge Two Sorted Lists", 1208, "Easy", ["merge"]], [203, "Remove Linked List Elements", 1212, "Easy", ["dummy node"]], [83, "Remove Duplicates from Sorted List", 1220, "Easy", ["iteration"]], [237, "Delete Node in a Linked List", 1289, "Medium", ["pointer manipulation"]], [2, "Add Two Numbers", 1260, "Medium", ["math", "recursion"]], [445, "Add Two Numbers II", 1464, "Medium", ["stack", "math"]], [328, "Odd Even Linked List", 1487, "Medium", ["pointer"]], [24, "Swap Nodes in Pairs", 1514, "Medium", ["recursion"]], [138, "Copy List with Random Pointer", 1644, "Medium", ["hash map"]], [430, "Flatten a Multilevel Doubly Linked List", 1609, "Medium", ["dfs", "stack"]], [61, "Rotate List", 1547, "Medium", ["two pointers"]], [23, "Merge K Sorted Lists", 1982, "Hard", ["heap", "divide and conquer"]], [25, "Reverse Nodes in k-Group", 2073, "Hard", ["in-place reversal"]], [1721, "Swapping Nodes in a Linked List", 1386, "Medium", ["two pointers"]], [2095, "Delete the Middle Node of a Linked List", 1464, "Medium", ["fast slow"]], [2130, "Maximum Twin Sum of a Linked List", 1317, "Medium", ["fast slow", "stack"]], [1669, "Merge In Between Linked Lists", 1338, "Medium", ["linked list"]], [725, "Split Linked List in Parts", 1476, "Medium", ["linked list"]], [817, "Linked List Components", 1524, "Medium", ["hash set"]]]}, {"id": "trees", "icon": "tr", "color": "#86efac", "name": "Trees - Core Traversals", "desc": "DFS pre, in, post-order, BFS level-order, and recursive thinking. Everything in trees builds on these traversals.", "problems": [[144, "Binary Tree Preorder Traversal", 1200, "Easy", ["recursion", "iteration"]], [94, "Binary Tree Inorder Traversal", 1200, "Easy", ["recursion", "iteration"]], [145, "Binary Tree Postorder Traversal", 1200, "Easy", ["recursion", "iteration"]], [104, "Maximum Depth of Binary Tree", 1200, "Easy", ["dfs", "bfs"]], [111, "Minimum Depth of Binary Tree", 1207, "Easy", ["bfs", "dfs"]], [226, "Invert Binary Tree", 1212, "Easy", ["recursion"]], [101, "Symmetric Tree", 1228, "Easy", ["recursion", "bfs"]], [543, "Diameter of Binary Tree", 1285, "Easy", ["dfs"]], [572, "Subtree of Another Tree", 1302, "Easy", ["dfs", "recursion"]], [112, "Path Sum", 1307, "Easy", ["dfs"]], [100, "Same Tree", 1308, "Easy", ["recursion", "bfs"]], [617, "Merge Two Binary Trees", 1315, "Easy", ["recursion"]], [110, "Balanced Binary Tree", 1322, "Easy", ["dfs"]], [404, "Sum of Left Leaves", 1355, "Easy", ["dfs"]], [637, "Average of Levels in Binary Tree", 1319, "Easy", ["bfs"]], [257, "Binary Tree Paths", 1382, "Easy", ["dfs", "backtracking"]], [1379, "Find a Corresponding Node of a Binary Tree in a Clone", 1268, "Easy", ["dfs"]], [671, "Second Minimum Node In a Binary Tree", 1322, "Easy", ["dfs"]], [102, "Binary Tree Level Order Traversal", 1354, "Medium", ["bfs"]], [107, "Binary Tree Level Order Traversal II", 1395, "Medium", ["bfs"]], [199, "Binary Tree Right Side View", 1408, "Medium", ["bfs", "dfs"]], [113, "Path Sum II", 1393, "Medium", ["dfs", "backtracking"]], [129, "Sum Root to Leaf Numbers", 1424, "Medium", ["dfs"]], [116, "Populating Next Right Pointers in Each Node", 1524, "Medium", ["bfs", "linked list"]], [117, "Populating Next Right Pointers in Each Node II", 1606, "Medium", ["bfs"]], [662, "Maximum Width of Binary Tree", 1652, "Medium", ["bfs"]], [222, "Count Complete Tree Nodes", 1568, "Medium", ["binary search", "recursion"]], [114, "Flatten Binary Tree to Linked List", 1568, "Medium", ["dfs", "in-place"]], [105, "Construct Binary Tree from Preorder and Inorder Traversal", 1593, "Medium", ["divide and conquer", "hash map"]], [106, "Construct Binary Tree from Inorder and Postorder Traversal", 1593, "Medium", ["divide and conquer"]], [623, "Add One Row to Tree", 1485, "Medium", ["dfs", "bfs"]], [1161, "Maximum Level Sum of a Binary Tree", 1453, "Medium", ["bfs"]], [236, "Lowest Common Ancestor of a Binary Tree", 1650, "Medium", ["dfs", "recursion"]], [863, "All Nodes Distance K in Binary Tree", 1663, "Medium", ["dfs", "bfs"]], [1325, "Delete Leaves With a Given Value", 1466, "Medium", ["dfs"]], [1372, "Longest ZigZag Path in a Binary Tree", 1713, "Medium", ["dfs", "dp"]], [998, "Maximum Binary Tree II", 1604, "Medium", ["recursion"]], [894, "All Possible Full Binary Trees", 1542, "Medium", ["recursion", "dp"]], [968, "Binary Tree Cameras", 2047, "Hard", ["dfs", "greedy"]], [124, "Binary Tree Maximum Path Sum", 2053, "Hard", ["dfs", "dp"]], [297, "Serialize and Deserialize Binary Tree", 2085, "Hard", ["bfs", "dfs", "design"]], [1448, "Count Good Nodes in Binary Tree", 1360, "Medium", ["dfs"]], [1026, "Maximum Difference Between Node and Ancestor", 1563, "Medium", ["dfs"]], [1457, "Pseudo-Palindromic Paths in a Binary Tree", 1530, "Medium", ["dfs", "bit manipulation"]], [988, "Smallest String Starting From Leaf", 1546, "Medium", ["dfs", "string"]], [1104, "Path In Zigzag Labelled Binary Tree", 1444, "Medium", ["math", "tree"]], [1430, "Check If a String Is a Valid Sequence from Root to Leaves Path in a Binary Tree", 1347, "Medium", ["dfs", "bfs"]]]}, {"id": "bst", "icon": "bst", "color": "#6ee7b7", "name": "Binary Search Tree", "desc": "BST property: left < node < right. In-order gives sorted output. Validate, search, insert, delete, kth-order stats.", "problems": [[700, "Search in a Binary Search Tree", 1200, "Easy", ["recursion"]], [701, "Insert into a Binary Search Tree", 1200, "Easy", ["recursion"]], [270, "Closest Binary Search Tree Value", 1258, "Easy", ["bst traversal"]], [783, "Minimum Distance Between BST Nodes", 1285, "Easy", ["inorder"]], [530, "Minimum Absolute Difference in BST", 1285, "Easy", ["inorder"]], [501, "Find Mode in Binary Search Tree", 1305, "Easy", ["inorder"]], [108, "Convert Sorted Array to Binary Search Tree", 1318, "Easy", ["divide and conquer"]], [653, "Two Sum IV Input is a BST", 1462, "Easy", ["inorder", "hash set"]], [938, "Range Sum of BST", 1161, "Easy", ["dfs"]], [897, "Increasing Order Search Tree", 1373, "Easy", ["inorder"]], [450, "Delete Node in a BST", 1285, "Medium", ["recursion"]], [109, "Convert Sorted List to Binary Search Tree", 1511, "Medium", ["fast slow", "divide and conquer"]], [98, "Validate Binary Search Tree", 1437, "Medium", ["dfs", "inorder"]], [230, "Kth Smallest Element in a BST", 1437, "Medium", ["inorder", "binary search"]], [173, "Binary Search Tree Iterator", 1461, "Medium", ["design", "inorder"]], [538, "Convert BST to Greater Tree", 1463, "Medium", ["reverse inorder"]], [1038, "Binary Search Tree to Greater Sum Tree", 1463, "Medium", ["reverse inorder"]], [669, "Trim a Binary Search Tree", 1474, "Medium", ["recursion"]], [235, "Lowest Common Ancestor of a Binary Search Tree", 1484, "Medium", ["bst property"]], [96, "Unique Binary Search Trees", 1491, "Medium", ["catalan number", "dp"]], [95, "Unique Binary Search Trees II", 1746, "Medium", ["dp", "tree generation"]], [99, "Recover Binary Search Tree", 1893, "Medium", ["morris traversal", "inorder"]], [1305, "All Elements in Two Binary Search Trees", 1391, "Medium", ["inorder", "merge"]], [1373, "Maximum Sum BST in Binary Tree", 1913, "Hard", ["dfs", "dp"]], [285, "Inorder Successor in BST", 1319, "Medium", ["bst traversal"]], [510, "Inorder Successor in BST II", 1380, "Medium", ["bst traversal"]]]}, {"id": "bfs-dfs-graphs", "icon": "gf", "color": "#fb923c", "name": "BFS and DFS on Graphs and Grids", "desc": "Graph traversal on adjacency lists and 2D grids. BFS for shortest path, DFS for connected components and cycle detection.", "problems": [[733, "Flood Fill", 1200, "Easy", ["dfs", "bfs", "matrix"]], [463, "Island Perimeter", 1200, "Easy", ["matrix", "counting"]], [695, "Max Area of Island", 1278, "Medium", ["dfs", "matrix"]], [200, "Number of Islands", 1408, "Medium", ["dfs", "bfs", "union find"]], [1020, "Number of Enclaves", 1427, "Medium", ["dfs", "bfs"]], [1254, "Number of Closed Islands", 1428, "Medium", ["dfs"]], [286, "Walls and Gates", 1428, "Medium", ["bfs", "multi-source"]], [130, "Surrounded Regions", 1567, "Medium", ["dfs", "bfs"]], [133, "Clone Graph", 1484, "Medium", ["dfs", "bfs", "hash map"]], [994, "Rotting Oranges", 1569, "Medium", ["multi-source bfs"]], [542, "01 Matrix", 1572, "Medium", ["multi-source bfs", "dp"]], [417, "Pacific Atlantic Water Flow", 1743, "Medium", ["dfs", "bfs"]], [1376, "Time Needed to Inform All Employees", 1561, "Medium", ["dfs", "bfs"]], [841, "Keys and Rooms", 1416, "Medium", ["dfs"]], [547, "Number of Provinces", 1424, "Medium", ["dfs", "union find"]], [684, "Redundant Connection", 1561, "Medium", ["union find", "dfs"]], [261, "Graph Valid Tree", 1525, "Medium", ["union find", "dfs"]], [323, "Number of Connected Components in an Undirected Graph", 1506, "Medium", ["union find", "dfs"]], [1162, "As Far from Land as Possible", 1666, "Medium", ["multi-source bfs"]], [752, "Open the Lock", 1727, "Medium", ["bfs"]], [1091, "Shortest Path in Binary Matrix", 1554, "Medium", ["bfs"]], [909, "Snakes and Ladders", 1559, "Medium", ["bfs"]], [1197, "Minimum Knight Moves", 1601, "Medium", ["bfs"]], [785, "Is Graph Bipartite", 1658, "Medium", ["dfs", "bfs", "coloring"]], [886, "Possible Bipartition", 1658, "Medium", ["dfs", "bfs", "coloring"]], [934, "Shortest Bridge", 1825, "Medium", ["dfs", "multi-source bfs"]], [399, "Evaluate Division", 1671, "Medium", ["dfs", "graph"]], [1557, "Minimum Number of Vertices to Reach All Nodes", 1512, "Medium", ["graph", "in-degree"]], [2101, "Detonate the Maximum Bombs", 1880, "Medium", ["graph", "bfs", "dfs"]], [127, "Word Ladder", 1793, "Hard", ["bfs", "string"]], [1293, "Shortest Path in a Grid with Obstacles Elimination", 1967, "Hard", ["bfs"]], [815, "Bus Routes", 1964, "Hard", ["bfs"]], [126, "Word Ladder II", 2036, "Hard", ["bfs", "backtracking"]], [1971, "Find if Path Exists in Graph", 1200, "Easy", ["bfs", "dfs", "union find"]], [997, "Find the Town Judge", 1200, "Easy", ["graph", "in-degree"]], [1791, "Find Center of Star Graph", 1200, "Easy", ["graph"]], [207, "Course Schedule", 1508, "Medium", ["topological sort"]], [2368, "Reachable Nodes With Restrictions", 1476, "Medium", ["dfs", "bfs", "tree"]], [1466, "Reorder Routes to Make All Paths Lead to the City Zero", 1634, "Medium", ["dfs", "bfs"]], [2492, "Minimum Score of a Path Between Two Cities", 1679, "Medium", ["union find", "dfs"]], [2316, "Count Unreachable Pairs of Nodes in an Undirected Graph", 1545, "Medium", ["union find", "dfs"]]]}, {"id": "backtracking", "icon": "bt", "color": "#e879f9", "name": "Backtracking", "desc": "Systematic DFS building candidates and pruning dead ends. Master the template: choose, explore, unchoose.", "problems": [[78, "Subsets", 1431, "Medium", ["recursion"]], [90, "Subsets II", 1491, "Medium", ["recursion", "dedup"]], [46, "Permutations", 1507, "Medium", ["recursion"]], [47, "Permutations II", 1561, "Medium", ["recursion", "dedup"]], [77, "Combinations", 1530, "Medium", ["recursion"]], [39, "Combination Sum", 1572, "Medium", ["recursion"]], [40, "Combination Sum II", 1635, "Medium", ["recursion", "dedup"]], [216, "Combination Sum III", 1534, "Medium", ["recursion"]], [377, "Combination Sum IV", 1514, "Medium", ["dp"]], [22, "Generate Parentheses", 1525, "Medium", ["recursion"]], [93, "Restore IP Addresses", 1558, "Medium", ["recursion", "string"]], [131, "Palindrome Partitioning", 1597, "Medium", ["recursion", "dp"]], [17, "Letter Combinations of a Phone Number", 1474, "Medium", ["recursion"]], [79, "Word Search", 1797, "Medium", ["dfs", "matrix"]], [1239, "Maximum Length of a Concatenated String with Unique Characters", 1660, "Medium", ["bitmask", "recursion"]], [491, "Non-decreasing Subsequences", 1611, "Medium", ["recursion", "dedup"]], [526, "Beautiful Arrangement", 1500, "Medium", ["recursion"]], [784, "Letter Case Permutation", 1460, "Medium", ["recursion"]], [698, "Partition to K Equal Sum Subsets", 1770, "Medium", ["recursion", "bitmask dp"]], [473, "Matchsticks to Square", 1791, "Medium", ["recursion", "bitmask dp"]], [1286, "Iterator for Combination", 1601, "Medium", ["design", "recursion"]], [1980, "Find Unique Binary String", 1470, "Medium", ["backtracking", "string"]], [1255, "Maximum Score Words Formed by Letters", 1829, "Hard", ["bitmask", "recursion"]], [37, "Sudoku Solver", 2188, "Hard", ["constraint", "recursion"]], [51, "N-Queens", 2020, "Hard", ["recursion", "constraint"]], [52, "N-Queens II", 1828, "Hard", ["recursion", "constraint"]], [212, "Word Search II", 2130, "Hard", ["trie", "backtracking"]], [332, "Reconstruct Itinerary", 1947, "Hard", ["dfs", "eulerian path"]], [1415, "The k-th Lexicographical String of All Happy Strings of Length n", 1589, "Medium", ["backtracking"]], [967, "Numbers With Same Consecutive Differences", 1528, "Medium", ["backtracking", "bfs"]], [842, "Split Array into Fibonacci Sequence", 1595, "Medium", ["backtracking", "string"]], [1079, "Letter Tile Possibilities", 1592, "Medium", ["backtracking", "counting"]]]}, {"id": "dynamic-programming", "icon": "dp", "color": "#60a5fa", "name": "Dynamic Programming", "desc": "Overlapping subproblems + optimal substructure. Master 1D DP, then 2D grid and string DP, then knapsack variants.", "problems": [[70, "Climbing Stairs", 1200, "Easy", ["1d dp", "fibonacci"]], [746, "Min Cost Climbing Stairs", 1200, "Easy", ["1d dp"]], [509, "Fibonacci Number", 1200, "Easy", ["1d dp", "math"]], [1137, "N-th Tribonacci Number", 1200, "Easy", ["1d dp"]], [338, "Counting Bits", 1230, "Easy", ["dp", "bit manipulation"]], [53, "Maximum Subarray", 1200, "Medium", ["kadanes", "1d dp"]], [198, "House Robber", 1412, "Medium", ["1d dp"]], [213, "House Robber II", 1487, "Medium", ["1d dp", "circular"]], [337, "House Robber III", 1624, "Medium", ["tree dp", "dfs"]], [740, "Delete and Earn", 1456, "Medium", ["1d dp", "bucket sort"]], [152, "Maximum Product Subarray", 1488, "Medium", ["1d dp"]], [918, "Maximum Sum Circular Subarray", 1777, "Medium", ["kadanes", "math"]], [322, "Coin Change", 1473, "Medium", ["1d dp", "unbounded knapsack"]], [518, "Coin Change II", 1646, "Medium", ["2d dp", "unbounded knapsack"]], [279, "Perfect Squares", 1479, "Medium", ["1d dp", "bfs"]], [139, "Word Break", 1569, "Medium", ["1d dp", "hash set"]], [300, "Longest Increasing Subsequence", 1611, "Medium", ["1d dp", "binary search"]], [673, "Number of Longest Increasing Subsequence", 1765, "Medium", ["1d dp"]], [1143, "Longest Common Subsequence", 1640, "Medium", ["2d dp", "string"]], [583, "Delete Operation for Two Strings", 1529, "Medium", ["2d dp", "string"]], [72, "Edit Distance", 1727, "Medium", ["2d dp", "string"]], [516, "Longest Palindromic Subsequence", 1616, "Medium", ["2d dp", "string"]], [5, "Longest Palindromic Substring", 1616, "Medium", ["2d dp", "expand around center"]], [647, "Palindromic Substrings", 1538, "Medium", ["2d dp", "expand"]], [1312, "Minimum Insertion Steps to Make a String Palindrome", 1815, "Medium", ["2d dp"]], [416, "Partition Equal Subset Sum", 1624, "Medium", ["0-1 knapsack"]], [474, "Ones and Zeroes", 1658, "Medium", ["2d knapsack"]], [494, "Target Sum", 1627, "Medium", ["dp", "dfs"]], [1049, "Last Stone Weight II", 1656, "Medium", ["knapsack"]], [55, "Jump Game", 1403, "Medium", ["greedy", "1d dp"]], [45, "Jump Game II", 1505, "Medium", ["greedy", "1d dp"]], [1696, "Jump Game VI", 1746, "Medium", ["dp", "deque"]], [62, "Unique Paths", 1318, "Medium", ["2d dp", "math"]], [63, "Unique Paths II", 1388, "Medium", ["2d dp"]], [64, "Minimum Path Sum", 1388, "Medium", ["2d dp"]], [120, "Triangle", 1481, "Medium", ["2d dp"]], [931, "Minimum Falling Path Sum", 1482, "Medium", ["2d dp"]], [1277, "Count Square Submatrices with All Ones", 1515, "Medium", ["2d dp"]], [1014, "Best Sightseeing Pair", 1545, "Medium", ["1d dp"]], [309, "Best Time to Buy and Sell Stock with Cooldown", 1594, "Medium", ["state machine dp"]], [714, "Best Time to Buy and Sell Stock with Transaction Fee", 1594, "Medium", ["state machine dp"]], [123, "Best Time to Buy and Sell Stock III", 1708, "Hard", ["state machine dp"]], [188, "Best Time to Buy and Sell Stock IV", 1977, "Hard", ["state machine dp"]], [343, "Integer Break", 1493, "Medium", ["dp", "math"]], [96, "Unique Binary Search Trees", 1491, "Medium", ["catalan number", "dp"]], [486, "Predict the Winner", 1623, "Medium", ["game theory dp"]], [1140, "Stone Game II", 1788, "Medium", ["game theory dp"]], [464, "Can I Win", 1931, "Medium", ["bitmask dp", "game theory"]], [1039, "Minimum Score Triangulation of Polygon", 1877, "Medium", ["interval dp"]], [1547, "Minimum Cost to Cut a Stick", 1929, "Hard", ["interval dp"]], [312, "Burst Balloons", 2060, "Hard", ["interval dp"]], [10, "Regular Expression Matching", 2088, "Hard", ["2d dp", "string"]], [44, "Wildcard Matching", 1992, "Hard", ["2d dp", "string"]], [115, "Distinct Subsequences", 1958, "Hard", ["2d dp", "string"]], [140, "Word Break II", 2081, "Hard", ["backtracking", "dp", "trie"]], [1458, "Max Dot Product of Two Subsequences", 1823, "Hard", ["2d dp"]], [1092, "Shortest Common Supersequence", 1976, "Hard", ["2d dp", "string"]], [1031, "Maximum Sum of Two Non-Overlapping Subarrays", 1680, "Medium", ["prefix sum", "dp"]], [1218, "Longest Arithmetic Subsequence of Given Difference", 1658, "Medium", ["hash map", "dp"]], [1027, "Longest Arithmetic Subsequence", 1760, "Medium", ["hash map", "dp"]], [322, "Coin Change", 1473, "Medium", ["unbounded knapsack"]], [2140, "Solving Questions With Brainpower", 1519, "Medium", ["1d dp"]], [790, "Domino and Tromino Tiling", 1543, "Medium", ["1d dp", "math"]], [983, "Minimum Cost For Tickets", 1622, "Medium", ["1d dp"]], [1043, "Partition Array for Maximum Sum", 1527, "Medium", ["1d dp"]], [1035, "Uncrossed Lines", 1518, "Medium", ["2d dp", "lcs"]], [1025, "Divisor Game", 1172, "Easy", ["math", "dp"]], [2466, "Count Ways To Build Good Strings", 1694, "Medium", ["1d dp"]], [2304, "Minimum Path Cost in a Grid", 1658, "Medium", ["2d dp"]], [1770, "Maximum Score from Performing Multiplication Operations", 1674, "Medium", ["2d dp"]], [1911, "Maximum Alternating Subsequence Sum", 1692, "Medium", ["1d dp"]], [1048, "Longest String Chain", 1599, "Medium", ["hash map", "dp"]], [368, "Largest Divisible Subset", 1642, "Medium", ["dp", "math"]], [646, "Maximum Length of Pair Chain", 1544, "Medium", ["dp", "greedy"]]]}, {"id": "graphs-advanced", "icon": "ga", "color": "#f0b429", "name": "Graphs - Advanced", "desc": "Union-Find for dynamic connectivity, Dijkstra and Bellman-Ford for weighted shortest paths, topological sort for DAG ordering.", "problems": [[547, "Number of Provinces", 1424, "Medium", ["union find", "dfs"]], [684, "Redundant Connection", 1561, "Medium", ["union find"]], [261, "Graph Valid Tree", 1525, "Medium", ["union find", "dfs"]], [323, "Number of Connected Components", 1506, "Medium", ["union find"]], [1319, "Number of Operations to Make Network Connected", 1633, "Medium", ["union find"]], [990, "Satisfiability of Equality Equations", 1638, "Medium", ["union find"]], [721, "Accounts Merge", 1715, "Medium", ["union find", "dfs"]], [207, "Course Schedule", 1508, "Medium", ["topological sort", "dfs"]], [210, "Course Schedule II", 1540, "Medium", ["topological sort", "bfs"]], [310, "Minimum Height Trees", 1617, "Medium", ["topological sort", "bfs"]], [802, "Find Eventual Safe States", 1722, "Medium", ["topological sort", "dfs"]], [444, "Sequence Reconstruction", 1752, "Medium", ["topological sort"]], [743, "Network Delay Time", 1631, "Medium", ["dijkstra", "bellman-ford"]], [1514, "Path with Maximum Probability", 1648, "Medium", ["dijkstra"]], [1631, "Path With Minimum Effort", 1765, "Medium", ["dijkstra", "binary search"]], [787, "Cheapest Flights Within K Stops", 1786, "Medium", ["bellman-ford", "bfs"]], [1334, "Find the City With the Smallest Number of Neighbors", 1599, "Medium", ["floyd-warshall", "dijkstra"]], [1584, "Min Cost to Connect All Points", 1857, "Medium", ["prim", "kruskal"]], [778, "Swim in Rising Water", 2097, "Hard", ["dijkstra", "binary search"]], [269, "Alien Dictionary", 1950, "Hard", ["topological sort", "bfs"]], [1857, "Largest Color Value in a Directed Graph", 2083, "Hard", ["topological sort", "dp"]], [2115, "Find All Possible Recipes from Given Supplies", 1679, "Medium", ["topological sort", "hash map"]]]}, {"id": "heap", "icon": "hp", "color": "#fbbf24", "name": "Heap and Priority Queue", "desc": "Min/max heap for top-K, greedy scheduling, streaming medians, and merging sorted sequences.", "problems": [[1046, "Last Stone Weight", 1172, "Easy", ["max heap"]], [703, "Kth Largest Element in a Stream", 1407, "Easy", ["min heap"]], [1337, "The K Weakest Rows in a Matrix", 1302, "Easy", ["heap", "binary search"]], [2099, "Find Subsequence of Length K With the Largest Sum", 1342, "Medium", ["heap"]], [1845, "Seat Reservation Manager", 1547, "Medium", ["heap", "design"]], [973, "K Closest Points to Origin", 1447, "Medium", ["max heap", "quickselect"]], [215, "Kth Largest Element in an Array", 1437, "Medium", ["min heap", "quickselect"]], [347, "Top K Frequent Elements", 1507, "Medium", ["max heap", "bucket sort"]], [692, "Top K Frequent Words", 1556, "Medium", ["heap", "hash map"]], [378, "Kth Smallest Element in a Sorted Matrix", 1590, "Medium", ["heap", "binary search"]], [1642, "Furthest Building You Can Reach", 1598, "Medium", ["min heap", "greedy"]], [451, "Sort Characters By Frequency", 1543, "Medium", ["heap", "hash map"]], [2542, "Maximum Subsequence Score", 1694, "Medium", ["heap", "sorting", "greedy"]], [2462, "Total Cost to Hire K Workers", 1763, "Medium", ["min heap"]], [621, "Task Scheduler", 1694, "Medium", ["max heap", "greedy"]], [1834, "Single-Threaded CPU", 1797, "Medium", ["heap", "sorting"]], [355, "Design Twitter", 1780, "Medium", ["heap", "hash map", "design"]], [1167, "Minimum Cost to Connect Sticks", 1476, "Medium", ["heap", "greedy"]], [2336, "Smallest Number in Infinite Set", 1476, "Medium", ["heap", "design"]], [871, "Minimum Number of Refueling Stops", 1929, "Hard", ["max heap", "greedy", "dp"]], [295, "Find Median from Data Stream", 1931, "Hard", ["two heaps"]], [480, "Sliding Window Median", 2210, "Hard", ["two heaps"]], [23, "Merge K Sorted Lists", 1982, "Hard", ["min heap", "divide and conquer"]], [1383, "Maximum Performance of a Team", 2091, "Hard", ["heap", "sorting", "greedy"]], [407, "Trapping Rain Water II", 2184, "Hard", ["heap", "bfs", "matrix"]], [1996, "The Number of Weak Characters in the Game", 1726, "Medium", ["sorting", "greedy"]], [2530, "Maximal Score After Applying K Operations", 1527, "Medium", ["max heap"]], [2208, "Minimum Operations to Halve Array Sum", 1550, "Medium", ["max heap", "greedy"]], [1962, "Remove Stones to Minimize the Total", 1521, "Medium", ["max heap"]], [1753, "Maximum Score From Removing Stones", 1488, "Medium", ["math", "heap"]]]}, {"id": "greedy", "icon": "gr", "color": "#4ade80", "name": "Greedy", "desc": "Make locally optimal choices at each step. Works when greedy choice property holds. Often paired with sorting, heaps, or intervals.", "problems": [[455, "Assign Cookies", 1200, "Easy", ["sorting"]], [860, "Lemonade Change", 1200, "Easy", ["simulation"]], [1005, "Maximize Sum Of Array After K Negations", 1200, "Easy", ["sorting"]], [976, "Largest Perimeter Triangle", 1214, "Easy", ["sorting"]], [2037, "Minimum Number of Moves to Seat Everyone", 1212, "Easy", ["sorting"]], [1221, "Split a String in Balanced Strings", 1222, "Easy", ["counting"]], [605, "Can Place Flowers", 1234, "Easy", ["greedy", "array"]], [1403, "Minimum Subsequence in Non-Increasing Order", 1225, "Easy", ["sorting"]], [1710, "Maximum Units on a Truck", 1266, "Easy", ["sorting"]], [1827, "Minimum Operations to Make the Array Increasing", 1224, "Easy", ["greedy"]], [2410, "Maximum Matching of Players With Trainers", 1381, "Medium", ["sorting", "two pointers"]], [55, "Jump Game", 1403, "Medium", ["greedy"]], [45, "Jump Game II", 1505, "Medium", ["greedy"]], [134, "Gas Station", 1532, "Medium", ["greedy", "simulation"]], [881, "Boats to Save People", 1530, "Medium", ["sorting", "two pointers"]], [406, "Queue Reconstruction by Height", 1506, "Medium", ["sorting", "greedy"]], [452, "Minimum Number of Arrows to Burst Balloons", 1548, "Medium", ["intervals", "sorting"]], [435, "Non-overlapping Intervals", 1586, "Medium", ["intervals", "sorting"]], [763, "Partition Labels", 1629, "Medium", ["string", "hash map"]], [621, "Task Scheduler", 1694, "Medium", ["heap", "counting"]], [767, "Reorganize String", 1681, "Medium", ["heap", "counting"]], [1405, "Longest Happy String", 1820, "Medium", ["heap", "greedy"]], [738, "Monotone Increasing Digits", 1558, "Medium", ["greedy", "string"]], [402, "Remove K Digits", 1710, "Medium", ["greedy", "monotonic stack"]], [1024, "Video Stitching", 1746, "Medium", ["greedy", "dp"]], [1326, "Minimum Number of Taps to Open to Water a Garden", 1885, "Hard", ["intervals", "greedy", "dp"]], [135, "Candy", 1609, "Hard", ["greedy", "two pass"]], [330, "Patching Array", 1964, "Hard", ["math", "greedy"]], [968, "Binary Tree Cameras", 2053, "Hard", ["tree dp", "greedy"]], [2126, "Destroying Asteroids", 1373, "Medium", ["sorting", "greedy"]], [2294, "Partition Array Such That Maximum Difference Is K", 1382, "Medium", ["sorting", "greedy"]], [1647, "Minimum Deletions to Make Character Frequencies Unique", 1509, "Medium", ["sorting", "greedy"]], [1689, "Partitioning Into Minimum Number Of Deci-Binary Numbers", 1308, "Medium", ["greedy", "string"]], [1733, "Minimum Number of People to Teach", 1561, "Medium", ["greedy", "hash map"]], [1775, "Equal Sum Arrays With Minimum Number of Operations", 1628, "Medium", ["greedy", "heap"]], [2383, "Minimum Hours of Training to Win a Competition", 1247, "Easy", ["greedy"]]]}, {"id": "intervals", "icon": "iv", "color": "#94a3b8", "name": "Intervals", "desc": "Sort by start time, then merge, schedule, or count overlaps greedily. Key insight: think about what happens at start and end events.", "problems": [[252, "Meeting Rooms", 1310, "Easy", ["sorting"]], [228, "Summary Ranges", 1328, "Easy", ["array"]], [56, "Merge Intervals", 1551, "Medium", ["sorting"]], [57, "Insert Interval", 1657, "Medium", ["array"]], [435, "Non-overlapping Intervals", 1586, "Medium", ["sorting", "greedy"]], [452, "Minimum Number of Arrows to Burst Balloons", 1548, "Medium", ["sorting", "greedy"]], [253, "Meeting Rooms II", 1710, "Medium", ["heap", "sorting", "sweep line"]], [1094, "Car Pooling", 1549, "Medium", ["sweep line", "heap"]], [986, "Interval List Intersections", 1564, "Medium", ["two pointers"]], [1288, "Remove Covered Intervals", 1571, "Medium", ["sorting"]], [1272, "Remove Interval", 1562, "Medium", ["array"]], [2406, "Divide Intervals Into Minimum Number of Groups", 1713, "Medium", ["heap", "sorting"]], [759, "Employee Free Time", 1804, "Hard", ["heap", "sorting"]], [1851, "Minimum Interval to Include Each Query", 2286, "Hard", ["heap", "sorting", "offline"]], [715, "Range Module", 2262, "Hard", ["sorted list", "binary search"]], [2446, "Determine if Two Events Have Conflict", 1264, "Easy", ["string", "intervals"]], [3169, "Count Days Without Meetings", 1487, "Medium", ["sorting", "intervals"]]]}, {"id": "tries", "icon": "ti", "color": "#c084fc", "name": "Trie", "desc": "Prefix tree for O(L) string searches. Build one from scratch, understand insert, search, startsWith, then apply to word problems.", "problems": [[208, "Implement Trie Prefix Tree", 1526, "Medium", ["design", "string"]], [648, "Replace Words", 1451, "Medium", ["hash map", "trie"]], [211, "Design Add and Search Words Data Structure", 1783, "Medium", ["design", "dfs"]], [1268, "Search Suggestions System", 1573, "Medium", ["sorting", "binary search", "trie"]], [677, "Map Sum Pairs", 1556, "Medium", ["design", "hash map"]], [139, "Word Break", 1569, "Medium", ["dp", "trie"]], [421, "Maximum XOR of Two Numbers in an Array", 1905, "Medium", ["trie", "bit manipulation"]], [336, "Palindrome Pairs", 2100, "Hard", ["hash map", "trie", "string"]], [212, "Word Search II", 2136, "Hard", ["backtracking", "trie"]], [745, "Prefix and Suffix Search", 2122, "Hard", ["trie", "design"]], [588, "Design In-Memory File System", 1907, "Hard", ["trie", "design"]], [1707, "Maximum XOR With an Element From Array", 2359, "Hard", ["trie", "offline", "sort"]]]}, {"id": "bit-manipulation", "icon": "bm", "color": "#38bdf8", "name": "Bit Manipulation", "desc": "XOR, AND, OR, shifts. Elegant O(1) tricks: find single elements, count set bits, power checks, subset enumeration.", "problems": [[191, "Number of 1 Bits", 1182, "Easy", ["math"]], [338, "Counting Bits", 1230, "Easy", ["dp"]], [190, "Reverse Bits", 1259, "Easy", ["math"]], [136, "Single Number", 1200, "Easy", ["xor"]], [268, "Missing Number", 1313, "Easy", ["xor", "math"]], [461, "Hamming Distance", 1218, "Easy", ["xor"]], [476, "Number Complement", 1218, "Easy", ["bit manipulation"]], [231, "Power of Two", 1200, "Easy", ["bit manipulation", "math"]], [693, "Binary Number with Alternating Bits", 1220, "Easy", ["math"]], [389, "Find the Difference", 1268, "Easy", ["xor"]], [1342, "Number of Steps to Reduce a Number to Zero", 1200, "Easy", ["math"]], [762, "Prime Number of Set Bits in Binary Representation", 1242, "Easy", ["math", "bit counting"]], [371, "Sum of Two Integers", 1537, "Medium", ["xor", "carry"]], [137, "Single Number II", 1768, "Medium", ["bit counting"]], [260, "Single Number III", 1800, "Medium", ["xor", "grouping"]], [201, "Bitwise AND of Numbers Range", 1530, "Medium", ["math", "bit trick"]], [477, "Total Hamming Distance", 1539, "Medium", ["bit counting"]], [318, "Maximum Product of Word Lengths", 1554, "Medium", ["bitmask", "dp"]], [1318, "Minimum Flips to Make a OR b Equal to c", 1382, "Medium", ["bit manipulation"]], [78, "Subsets", 1431, "Medium", ["bitmask", "recursion"]], [1371, "Find the Longest Substring Containing Vowels in Even Counts", 1813, "Medium", ["bitmask", "hash map"]], [1239, "Maximum Length of a Concatenated String with Unique Characters", 1658, "Medium", ["bitmask"]], [1611, "Minimum One Bit Operations to Make Integers Zero", 2017, "Hard", ["gray code", "math"]], [982, "Triples with Bitwise AND Equal To Zero", 2085, "Hard", ["bitmask", "dp"]], [2220, "Minimum Bit Flips to Convert Number", 1161, "Easy", ["bit manipulation"]], [2997, "Minimum Number of Operations to Make Array XOR Equal to K", 1365, "Medium", ["bit manipulation"]], [1829, "Maximum XOR for Each Query", 1523, "Medium", ["bit manipulation", "prefix"]], [2425, "Bitwise XOR of All Pairings", 1622, "Medium", ["bit manipulation", "math"]]]}, {"id": "math-geometry", "icon": "mg", "color": "#f472b6", "name": "Math and Geometry", "desc": "GCD, primes, modular arithmetic, combinatorics, and geometry basics. Many hard problems reduce to elegant math.", "problems": [[9, "Palindrome Number", 1200, "Easy", ["math"]], [13, "Roman to Integer", 1200, "Easy", ["string", "hash map"]], [66, "Plus One", 1200, "Easy", ["array", "math"]], [67, "Add Binary", 1220, "Easy", ["string", "math"]], [231, "Power of Two", 1200, "Easy", ["bit manipulation", "math"]], [326, "Power of Three", 1200, "Easy", ["math"]], [342, "Power of Four", 1265, "Easy", ["bit manipulation", "math"]], [292, "Nim Game", 1200, "Easy", ["game theory", "math"]], [1232, "Check If It Is a Straight Line", 1200, "Easy", ["geometry", "math"]], [168, "Excel Sheet Column Title", 1298, "Easy", ["math", "string"]], [171, "Excel Sheet Column Number", 1200, "Easy", ["math"]], [412, "Fizz Buzz", 1200, "Easy", ["math"]], [204, "Count Primes", 1411, "Medium", ["sieve of eratosthenes"]], [12, "Integer to Roman", 1330, "Medium", ["string", "greedy"]], [50, "Pow of x to n", 1319, "Medium", ["fast exponentiation"]], [29, "Divide Two Integers", 1549, "Medium", ["bit manipulation", "math"]], [43, "Multiply Strings", 1483, "Medium", ["string", "math"]], [528, "Random Pick with Weight", 1558, "Medium", ["binary search", "prefix sum"]], [470, "Implement Rand10 Using Rand7", 1594, "Medium", ["rejection sampling", "math"]], [384, "Shuffle an Array", 1532, "Medium", ["fisher-yates", "math"]], [1497, "Check If Array Pairs Are Divisible by k", 1553, "Medium", ["math", "hash map"]], [372, "Super Pow", 1520, "Medium", ["modular exponentiation"]], [1017, "Convert to Base Negative Two", 1555, "Medium", ["math"]], [829, "Consecutive Numbers Sum", 1817, "Hard", ["math"]], [149, "Max Points on a Line", 1803, "Hard", ["hash map", "geometry", "gcd"]], [780, "Reaching Points", 2130, "Hard", ["math", "reverse thinking"]], [2013, "Detect Squares", 1797, "Medium", ["hash map", "geometry"]], [593, "Valid Square", 1500, "Medium", ["geometry", "math"]], [858, "Mirror Reflection", 1500, "Medium", ["geometry", "math"]], [2319, "Check if Matrix Is X-Matrix", 1249, "Easy", ["matrix", "math"]], [1351, "Count Negative Numbers in a Sorted Matrix", 1200, "Easy", ["matrix"]]]}];
+
+// ── persistence: write to disk via Flask API, fall back to localStorage ──────
+const LS_KEY = "lcr_trainer_v1";
+let saveTimer = null;
+const statusEl = document.getElementById("savestatus");
+
+function defaultState() {
+  return { solved: [], userRating: 1200, attempts: {}, selectedTopics: PATTERNS.map(p => p.id), lastRecommendations: [] };
+}
+
+let appState = defaultState();
+let solved = new Set();
+let flt = "all", qry = "";
+let currentAttemptProblem = null;
+
+function setStatus(s, text) {
+  statusEl.className = s;
+  statusEl.textContent = text;
+}
+
+function normalizeState(data) {
+  const base = defaultState();
+  if (!data || typeof data !== "object") return base;
+  return {
+    solved: Array.isArray(data.solved) ? data.solved.map(Number) : [],
+    userRating: Number(data.userRating || data.rating || 1200),
+    attempts: data.attempts && typeof data.attempts === "object" ? data.attempts : {},
+    selectedTopics: Array.isArray(data.selectedTopics) && data.selectedTopics.length ? data.selectedTopics : base.selectedTopics,
+    lastRecommendations: Array.isArray(data.lastRecommendations) ? data.lastRecommendations.map(Number) : []
+  };
+}
+
+function syncSolvedFromState() { solved = new Set(appState.solved.map(Number)); }
+function syncStateFromSolved() { appState.solved = [...solved].map(Number).sort((a,b)=>a-b); }
+
+async function saveToServer() {
+  syncStateFromSolved();
+  try {
+    const res = await fetch("/api/progress", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(appState)
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    localStorage.setItem(LS_KEY, JSON.stringify(appState));
+    setStatus("saved", "● saved to disk");
+    setTimeout(() => setStatus("", "● disk"), 2000);
+  } catch(e) {
+    console.warn("Server save failed, using localStorage:", e);
+    localStorage.setItem(LS_KEY, JSON.stringify(appState));
+    setStatus("err", "● local only");
+  }
+}
+
+function save() {
+  setStatus("saving", "● saving…");
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveToServer, 350);
+}
+
+async function loadProgress() {
+  try {
+    const res = await fetch("/api/progress");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    appState = normalizeState(data);
+    setStatus("saved", "● disk loaded");
+    setTimeout(() => setStatus("", "● disk"), 2000);
+  } catch(e) {
+    console.warn("Could not load from server, falling back to localStorage:", e);
+    appState = normalizeState(JSON.parse(localStorage.getItem(LS_KEY) || "null"));
+    setStatus("err", "● local only");
+  }
+  syncSolvedFromState();
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+function rc(r){if(r<1400)return"r1";if(r<1600)return"r2";if(r<1900)return"r3";if(r<2100)return"r4";if(r<2400)return"r5";return"r6"}
+function dc(d){return{Easy:"de",Medium:"dm",Hard:"dh"}[d]||""}
+function slug(n){return n.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}
+function problemUrl(name){return `https://leetcode.com/problems/${slug(name)}/`;}
+function allProblems(){return PATTERNS.flatMap(p => p.problems.map(r => ({pattern:p, id:r[0], name:r[1], rating:r[2], diff:r[3], tags:r[4]})));}
+function findProblem(id){return allProblems().find(p => p.id === Number(id));}
+function attemptsFor(id){return appState.attempts[String(id)] || [];}
+function lastAttempt(id){const a=attemptsFor(id);return a.length?a[a.length-1]:null;}
+function hasWeakAttempt(id){const a=lastAttempt(id);return !!a && (a.solved === false || Number(a.selfScore) <= 2 || Number(a.hints) >= 2);}
+function selectedTopicSet(){return new Set(appState.selectedTopics || PATTERNS.map(p=>p.id));}
+function clamp(n, lo, hi){return Math.max(lo, Math.min(hi, n));}
+function escapeHtml(s){return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr;}
+
+function ratingDelta(problemRating, solvedResult, minutes, hints, selfScore) {
+  const gap = problemRating - appState.userRating;
+  let delta = 0;
+  if (solvedResult) {
+    delta = 8 + Math.round(gap / 80);
+    if (minutes <= 15) delta += 7;
+    else if (minutes <= 30) delta += 3;
+    else if (minutes >= 60) delta -= 3;
+    delta -= hints * 4;
+    delta += (selfScore - 3) * 3;
+  } else {
+    delta = -8 + Math.round(gap / 120);
+    delta -= Math.max(0, hints - 1) * 2;
+    delta += (selfScore - 3) * 2;
+  }
+  return clamp(delta, -35, 35);
+}
+
+// ── UI construction ─────────────────────────────────────────────────────────
+function buildTopicBox() {
+  const chosen = selectedTopicSet();
+  document.getElementById("topicBox").innerHTML = PATTERNS.map(p => `
+    <label class="topic-pill ${chosen.has(p.id)?"on":""}">
+      <input type="checkbox" value="${p.id}" ${chosen.has(p.id)?"checked":""}>
+      <span class="nd" style="background:${p.color}"></span>
+      <span>${p.name}</span>
+    </label>
+  `).join("");
+  document.querySelectorAll(".topic-pill input").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const vals = [...document.querySelectorAll(".topic-pill input:checked")].map(x => x.value);
+      appState.selectedTopics = vals.length ? vals : PATTERNS.map(p => p.id);
+      buildTopicBox();
+      save();
+    });
+  });
+}
+
+function buildNav(){
+  document.getElementById("nav").innerHTML=PATTERNS.map(p=>{
+    const sc=p.problems.filter(r=>solved.has(r[0])).length;
+    const weak=p.problems.filter(r=>hasWeakAttempt(r[0])).length;
+    return`<a class="ni" href="#${p.id}" data-id="${p.id}"><span class="nd" style="background:${p.color}"></span><span>${p.name}</span><span class="nc">${sc}/${p.problems.length}${weak?` · ${weak}w`:""}</span></a>`;
+  }).join("");
+}
+
+function updateProg(){
+  const tot=PATTERNS.reduce((s,p)=>s+p.problems.length,0);
+  const dn=PATTERNS.reduce((s,p)=>s+p.problems.filter(r=>solved.has(r[0])).length,0);
+  const attempts=Object.values(appState.attempts).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0);
+  const weakTopics=PATTERNS.filter(p=>p.problems.some(r=>hasWeakAttempt(r[0]))).length;
+  document.getElementById("ptx").textContent=dn+"/"+tot;
+  document.getElementById("pfl").style.width=(dn/tot*100).toFixed(1)+"%";
+  document.getElementById("hsub").textContent="// "+tot+" problems · "+PATTERNS.length+" patterns";
+  document.getElementById("userRatingView").textContent=Math.round(appState.userRating);
+  document.getElementById("manualRating").value=Math.round(appState.userRating);
+  document.getElementById("solvedView").textContent=dn;
+  document.getElementById("attemptsView").textContent=attempts;
+  document.getElementById("weakView").textContent=weakTopics;
+}
+
+function renderHistory() {
+  const entries=[];
+  for (const [id, arr] of Object.entries(appState.attempts)) {
+    const p=findProblem(id);
+    if(!p || !Array.isArray(arr)) continue;
+    arr.forEach(a => entries.push({...a, problem:p}));
+  }
+  entries.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  document.getElementById("historyList").innerHTML = entries.slice(0,12).map(a => `
+    <div class="hist">
+      <strong>${escapeHtml(a.problem.name)}</strong><br>
+      <small>${new Date(a.date).toLocaleDateString()} · ${a.solved?"solved":"missed"} · ${a.minutes}m · hints ${a.hints} · <span class="delta ${a.delta>=0?"good":"bad"}">${a.delta>=0?"+":""}${a.delta}</span></small>
+    </div>
+  `).join("") || `<div class="hist"><small>No attempts yet. Log one after solving a problem.</small></div>`;
+}
+
+function renderRecommendations(ids = appState.lastRecommendations) {
+  const box = document.getElementById("recommendations");
+  const probs = ids.map(findProblem).filter(Boolean);
+  if (!probs.length) { box.innerHTML=""; return; }
+  box.innerHTML = probs.map((p,i) => {
+    const tried=attemptsFor(p.id).length;
+    return `<div class="rec" style="--ac:${p.pattern.color}">
+      <div class="rec-top"><span>#${i+1} · ${p.pattern.name}</span><span class="${rc(p.rating)}">${p.rating}</span></div>
+      <a class="rec-name" href="${problemUrl(p.name)}" target="_blank" rel="noopener">${p.name}</a>
+      <div class="rec-meta"><span class="tag ${dc(p.diff)}">${p.diff}</span>${p.tags.map(t=>`<span class="tag">${t}</span>`).join("")}${tried?`<span class="tag">${tried} attempts</span>`:""}</div>
+      <div class="rec-actions"><button class="secondary log-attempt" data-id="${p.id}">log attempt</button><button class="secondary mark-solved" data-id="${p.id}">${solved.has(p.id)?"unsolve":"mark solved"}</button></div>
+    </div>`;
+  }).join("");
+  attachProblemButtons();
+}
+
+function generateRecommendations() {
+  let minR = Number(document.getElementById("minRating").value || 1200);
+  let maxR = Number(document.getElementById("maxRating").value || 1600);
+  if (minR > maxR) [minR, maxR] = [maxR, minR];
+  const count = clamp(Number(document.getElementById("countProblems").value || 6), 1, 25);
+  const policy = document.getElementById("includeSolved").value;
+  const mode = document.getElementById("targetMode").value;
+  const topics = selectedTopicSet();
+
+  let pool = allProblems().filter(p => p.rating >= minR && p.rating <= maxR && topics.has(p.pattern.id));
+  if (policy === "unsolved") pool = pool.filter(p => !solved.has(p.id));
+  if (policy === "review") pool = pool.filter(p => !solved.has(p.id) || hasWeakAttempt(p.id));
+
+  if (mode === "easiest") pool.sort((a,b)=>a.rating-b.rating);
+  else if (mode === "hardest") pool.sort((a,b)=>b.rating-a.rating);
+  else if (mode === "random") shuffle(pool);
+  else {
+    // Chess.com-style incremental feel:
+    // 1. prefer items near your current rating
+    // 2. then sort selected set from easier to harder
+    pool.sort((a,b)=>Math.abs(a.rating-appState.userRating)-Math.abs(b.rating-appState.userRating) || a.rating-b.rating);
+    pool = pool.slice(0, Math.max(count*3, count)).sort((a,b)=>a.rating-b.rating);
+  }
+  const recs = pool.slice(0,count);
+  appState.lastRecommendations = recs.map(p=>p.id);
+  renderRecommendations(appState.lastRecommendations);
+  save();
+}
+
+function render(){
+  const q=qry.toLowerCase();
+  let html="",any=false;
+  for(const p of PATTERNS){
+    let probs=p.problems.slice().sort((a,b)=>a[2]-b[2]);
+    if(q)probs=probs.filter(r=>r[1].toLowerCase().includes(q)||r[4].some(t=>t.toLowerCase().includes(q))||String(r[0]).includes(q));
+    if(flt==="solved")probs=probs.filter(r=>solved.has(r[0]));
+    if(flt==="unsolved")probs=probs.filter(r=>!solved.has(r[0]));
+    if(flt==="weak")probs=probs.filter(r=>hasWeakAttempt(r[0]));
+    if(!probs.length)continue;
+    any=true;
+    const rows=probs.map(r=>{
+      const [id,name,rating,diff,tags]=r;
+      const sv=solved.has(id);
+      const tries=attemptsFor(id).length;
+      return`<tr class="${sv?"sv":""}" data-id="${id}"><td class="tn">${id}</td><td class="tt"><a href="${problemUrl(name)}" target="_blank" rel="noopener">${name}</a> ${tries?`<span class="tag">${tries} attempts</span>`:""}</td><td class="tr ${rc(rating)}">${rating}</td><td class="td ${dc(diff)}">${diff}</td><td class="tg">${tags.map(t=>`<span>${t}</span>`).join("")}</td><td class="tc"><button class="attempt-btn log-attempt" data-id="${id}">log</button><button class="cb ${sv?"dn":""} mark-solved" data-id="${id}">✓</button></td></tr>`;
+    }).join("");
+    const sc=p.problems.filter(r=>solved.has(r[0])).length;
+    const wk=p.problems.filter(r=>hasWeakAttempt(r[0])).length;
+    html+=`<section class="sec" id="${p.id}"><div class="ph"><div class="pi" style="background:${p.color}22;color:${p.color};border:1px solid ${p.color}44">${p.icon}</div><div><div class="pn">${p.name}</div><div class="pd">${p.desc}</div></div><div class="ps"><strong>${sc}</strong>of ${p.problems.length}${wk?` · ${wk} weak`:""}</div></div><table><thead><tr><th>#</th><th>Problem</th><th>Rating</th><th>Difficulty</th><th>Tags</th><th>Track</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  }
+  if(!any)html=`<div class="empty">No problems match your search/filter.</div>`;
+  document.getElementById("main").innerHTML=html;
+  attachProblemButtons();
+  updateProg();buildNav();renderHistory();renderRecommendations();
+  document.querySelectorAll(".sec").forEach(s=>obs.observe(s));
+}
+
+function attachProblemButtons() {
+  document.querySelectorAll(".mark-solved").forEach(b=>{
+    b.onclick = e => {
+      e.stopPropagation();
+      const id=parseInt(b.dataset.id);
+      if(solved.has(id)) solved.delete(id); else solved.add(id);
+      syncStateFromSolved(); save(); render();
+    };
+  });
+  document.querySelectorAll(".log-attempt").forEach(b=>{
+    b.onclick = e => { e.stopPropagation(); openAttemptModal(parseInt(b.dataset.id)); };
+  });
+}
+
+function openAttemptModal(id) {
+  const p=findProblem(id);
+  if(!p) return;
+  currentAttemptProblem = p;
+  document.getElementById("modalTitle").textContent = p.name;
+  document.getElementById("modalSub").textContent = `${p.pattern.name} · rating ${p.rating} · ${p.diff}`;
+  document.getElementById("attemptSolved").value = "true";
+  document.getElementById("attemptMinutes").value = p.rating < 1400 ? 15 : p.rating < 1700 ? 25 : 40;
+  document.getElementById("attemptHints").value = 0;
+  document.getElementById("attemptScore").value = 3;
+  document.getElementById("attemptNotes").value = "";
+  document.getElementById("attemptModal").classList.add("show");
+}
+
+function closeAttemptModal() {
+  currentAttemptProblem = null;
+  document.getElementById("attemptModal").classList.remove("show");
+}
+
+function saveAttempt() {
+  if(!currentAttemptProblem) return;
+  const p=currentAttemptProblem;
+  const solvedResult=document.getElementById("attemptSolved").value === "true";
+  const minutes=Number(document.getElementById("attemptMinutes").value || 0);
+  const hints=Number(document.getElementById("attemptHints").value || 0);
+  const selfScore=Number(document.getElementById("attemptScore").value || 3);
+  const notes=document.getElementById("attemptNotes").value.trim();
+  const delta=ratingDelta(p.rating, solvedResult, minutes, hints, selfScore);
+  appState.userRating = clamp(Number(appState.userRating) + delta, 800, 3000);
+  if(solvedResult) solved.add(p.id);
+  syncStateFromSolved();
+  const key=String(p.id);
+  if(!Array.isArray(appState.attempts[key])) appState.attempts[key]=[];
+  appState.attempts[key].push({date:new Date().toISOString(), solved:solvedResult, minutes, hints, selfScore, notes, delta, ratingAfter:appState.userRating});
+  closeAttemptModal();
+  save();
+  render();
+}
+
+let st;
+document.getElementById("srch").addEventListener("input",e=>{clearTimeout(st);st=setTimeout(()=>{qry=e.target.value;render()},160)});
+document.querySelectorAll(".fb").forEach(b=>{
+  b.addEventListener("click",()=>{document.querySelectorAll(".fb").forEach(x=>x.classList.remove("on"));b.classList.add("on");flt=b.dataset.f;render()});
+});
+document.getElementById("generateBtn").addEventListener("click", generateRecommendations);
+document.getElementById("clearRecsBtn").addEventListener("click",()=>{appState.lastRecommendations=[];renderRecommendations([]);save();});
+document.getElementById("saveRatingBtn").addEventListener("click",()=>{appState.userRating=clamp(Number(document.getElementById("manualRating").value||1200),800,3000);save();render();});
+document.getElementById("resetTopics").addEventListener("click",()=>{appState.selectedTopics=PATTERNS.map(p=>p.id);buildTopicBox();save();});
+document.getElementById("resetProgressBtn").addEventListener("click",()=>{
+  if(!confirm("Reset solved problems, attempts, rating, and recommendations?")) return;
+  appState=defaultState(); syncSolvedFromState(); save(); buildTopicBox(); render();
+});
+document.getElementById("closeModal").addEventListener("click", closeAttemptModal);
+document.getElementById("cancelAttemptBtn").addEventListener("click", closeAttemptModal);
+document.getElementById("saveAttemptBtn").addEventListener("click", saveAttempt);
+document.getElementById("attemptModal").addEventListener("click", e=>{ if(e.target.id === "attemptModal") closeAttemptModal(); });
+
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting){const id=e.target.id;document.querySelectorAll(".ni").forEach(i=>i.classList.toggle("on",i.dataset.id===id))}});
+},{rootMargin:"-25% 0px -65% 0px"});
+
+// ── boot: load from server then render ───────────────────────────────────────
+loadProgress().then(() => {
+  buildTopicBox();
+  render();
+});
+</script>
+</body>
+</html>
