@@ -186,8 +186,7 @@ td{padding:8px 12px;vertical-align:middle}
     <button class="fb" data-f="solved">Solved</button>
     <button class="fb" data-f="weak">Weak</button>
   </div>
-  <div class="top-actions"><button class="mini-btn" id="resetTopics">All topics</button></div>
-  <div id="savestatus">● disk</div>
+  <div class="top-actions"><button class="mini-btn" id="resetTopics">Select all topics</button></div>
 </header>
 <div class="wrap">
   <section class="stats">
@@ -275,7 +274,7 @@ let saveTimer = null;
 const statusEl = document.getElementById("savestatus");
 
 function defaultState() {
-  return { solved: [], userRating: 1200, attempts: {}, selectedTopics: PATTERNS.map(p => p.id), lastRecommendations: [] };
+  return { solved: [], userRating: 1200, attempts: {}, selectedTopics: [], lastRecommendations: [] };
 }
 
 let appState = defaultState();
@@ -284,6 +283,7 @@ let flt = "all", qry = "";
 let currentAttemptProblem = null;
 
 function setStatus(s, text) {
+  if (!statusEl) return;
   statusEl.className = s;
   statusEl.textContent = text;
 }
@@ -295,7 +295,7 @@ function normalizeState(data) {
     solved: Array.isArray(data.solved) ? data.solved.map(Number) : [],
     userRating: Number(data.userRating || data.rating || 1200),
     attempts: data.attempts && typeof data.attempts === "object" ? data.attempts : {},
-    selectedTopics: Array.isArray(data.selectedTopics) && data.selectedTopics.length ? data.selectedTopics : base.selectedTopics,
+    selectedTopics: Array.isArray(data.selectedTopics) ? data.selectedTopics : [],
     lastRecommendations: Array.isArray(data.lastRecommendations) ? data.lastRecommendations.map(Number) : []
   };
 }
@@ -354,7 +354,7 @@ function findProblem(id){return allProblems().find(p => p.id === Number(id));}
 function attemptsFor(id){return appState.attempts[String(id)] || [];}
 function lastAttempt(id){const a=attemptsFor(id);return a.length?a[a.length-1]:null;}
 function hasWeakAttempt(id){const a=lastAttempt(id);return !!a && (a.solved === false || Number(a.selfScore) <= 2 || Number(a.hints) >= 2);}
-function selectedTopicSet(){return new Set(appState.selectedTopics || PATTERNS.map(p=>p.id));}
+function selectedTopicSet(){return new Set(Array.isArray(appState.selectedTopics) ? appState.selectedTopics : []);}
 function clamp(n, lo, hi){return Math.max(lo, Math.min(hi, n));}
 function escapeHtml(s){return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr;}
@@ -390,7 +390,7 @@ function buildTopicBox() {
   document.querySelectorAll(".topic-pill input").forEach(cb => {
     cb.addEventListener("change", () => {
       const vals = [...document.querySelectorAll(".topic-pill input:checked")].map(x => x.value);
-      appState.selectedTopics = vals.length ? vals : PATTERNS.map(p => p.id);
+      appState.selectedTopics = vals;
       buildTopicBox();
       save();
     });
@@ -461,6 +461,13 @@ function generateRecommendations() {
   const mode = document.getElementById("targetMode").value;
   const topics = selectedTopicSet();
 
+  if (topics.size === 0) {
+    appState.lastRecommendations = [];
+    document.getElementById("recommendations").innerHTML = `<div class="empty" style="grid-column:1/-1;padding:22px">Choose at least one topic to generate a training set.</div>`;
+    save();
+    return;
+  }
+
   let pool = allProblems().filter(p => p.rating >= minR && p.rating <= maxR && topics.has(p.pattern.id));
   if (policy === "unsolved") pool = pool.filter(p => !solved.has(p.id));
   if (policy === "review") pool = pool.filter(p => !solved.has(p.id) || hasWeakAttempt(p.id));
@@ -477,7 +484,11 @@ function generateRecommendations() {
   }
   const recs = pool.slice(0,count);
   appState.lastRecommendations = recs.map(p=>p.id);
-  renderRecommendations(appState.lastRecommendations);
+  if (!recs.length) {
+    document.getElementById("recommendations").innerHTML = `<div class="empty" style="grid-column:1/-1;padding:22px">No problems match your topic/rating filters. Try widening the rating range or including solved problems.</div>`;
+  } else {
+    renderRecommendations(appState.lastRecommendations);
+  }
   save();
 }
 
