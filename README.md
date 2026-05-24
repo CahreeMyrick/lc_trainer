@@ -1,4 +1,4 @@
-# LeetCode Trainer
+# Leetcode Trainer
 
 ## Setup
 
